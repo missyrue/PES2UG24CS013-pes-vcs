@@ -153,6 +153,48 @@ static int write_serialized_tree(const Tree *tree, ObjectID *id_out) {
     return rc;
 }
 
+static int write_tree_level(const Index *index, const char *prefix, ObjectID *id_out) {
+    Tree tree;
+    tree.count = 0;
+    size_t prefix_len = strlen(prefix);
+
+    for (int i = 0; i < index->count; i++) {
+        const IndexEntry *entry = &index->entries[i];
+        if (strncmp(entry->path, prefix, prefix_len) != 0) continue;
+
+        const char *rest = entry->path + prefix_len;
+        if (*rest == '\0') continue;
+
+        const char *slash = strchr(rest, '/');
+        if (!slash) {
+            if (!tree_has_entry(&tree, rest) &&
+                tree_add_entry(&tree, entry->mode, &entry->hash, rest) != 0) {
+                return -1;
+            }
+            continue;
+        }
+
+        size_t dir_len = (size_t)(slash - rest);
+        if (dir_len == 0 || dir_len >= sizeof(tree.entries[0].name)) return -1;
+
+        char dir_name[256];
+        memcpy(dir_name, rest, dir_len);
+        dir_name[dir_len] = '\0';
+
+        if (tree_has_entry(&tree, dir_name)) continue;
+
+        char child_prefix[512];
+        int written = snprintf(child_prefix, sizeof(child_prefix), "%s%s/", prefix, dir_name);
+        if (written < 0 || (size_t)written >= sizeof(child_prefix)) return -1;
+
+        ObjectID subtree_id;
+        if (write_tree_level(index, child_prefix, &subtree_id) != 0) return -1;
+        if (tree_add_entry(&tree, MODE_DIR, &subtree_id, dir_name) != 0) return -1;
+    }
+
+    return write_serialized_tree(&tree, id_out);
+}
+
 // Build a tree hierarchy from the current index and write all tree
 // objects to the object store.
 //
