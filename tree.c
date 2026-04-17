@@ -120,6 +120,25 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 
 // ─── TODO: Implement these ──────────────────────────────────────────────────
 
+static int tree_has_entry(const Tree *tree, const char *name) {
+    for (int i = 0; i < tree->count; i++) {
+        if (strcmp(tree->entries[i].name, name) == 0) return 1;
+    }
+    return 0;
+}
+
+static int tree_add_entry(Tree *tree, uint32_t mode, const ObjectID *hash, const char *name) {
+    if (tree->count >= MAX_TREE_ENTRIES || strlen(name) >= sizeof(tree->entries[0].name)) {
+        return -1;
+    }
+
+    TreeEntry *entry = &tree->entries[tree->count++];
+    entry->mode = mode;
+    entry->hash = *hash;
+    snprintf(entry->name, sizeof(entry->name), "%s", name);
+    return 0;
+}
+
 // Build a tree hierarchy from the current index and write all tree
 // objects to the object store.
 //
