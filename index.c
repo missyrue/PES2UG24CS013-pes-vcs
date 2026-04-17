@@ -266,8 +266,36 @@ int index_save(const Index *index) {
 //
 // Returns 0 on success, -1 on error.
 int index_add(Index *index, const char *path) {
-    // TODO: Implement file staging
-    // (See Lab Appendix for logical steps)
-    (void)index; (void)path;
+    struct stat st;
+    if (lstat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        fprintf(stderr, "error: '%s' is not a regular file\n", path);
+        return -1;
+    }
+    if (st.st_size > UINT32_MAX) {
+        fprintf(stderr, "error: '%s' is too large for the index\n", path);
+        return -1;
+    }
+    if (strlen(path) >= sizeof(index->entries[0].path)) {
+        fprintf(stderr, "error: path is too long: '%s'\n", path);
+        return -1;
+    }
+
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+
+    size_t len = (size_t)st.st_size;
+    void *data = malloc(len ? len : 1);
+    if (!data) {
+        fclose(f);
+        return -1;
+    }
+    if (len > 0 && fread(data, 1, len, f) != len) {
+        free(data);
+        fclose(f);
+        return -1;
+    }
+    fclose(f);
+
+    free(data);
     return -1;
 }
