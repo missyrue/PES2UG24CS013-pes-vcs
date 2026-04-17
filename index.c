@@ -204,10 +204,56 @@ int index_load(Index *index) {
 //
 // Returns 0 on success, -1 on error.
 int index_save(const Index *index) {
-    // TODO: Implement atomic index saving
-    // (See Lab Appendix for logical steps)
-    (void)index;
-    return -1;
+    IndexEntry *sorted = NULL;
+    if (index->count > 0) {
+        sorted = malloc((size_t)index->count * sizeof(IndexEntry));
+        if (!sorted) return -1;
+        memcpy(sorted, index->entries, (size_t)index->count * sizeof(IndexEntry));
+        qsort(sorted, index->count, sizeof(IndexEntry), compare_index_entries);
+    }
+
+    const char *tmp_path = ".pes/index.tmp";
+    FILE *f = fopen(tmp_path, "w");
+    if (!f) {
+        free(sorted);
+        return -1;
+    }
+
+    for (int i = 0; i < index->count; i++) {
+        char hex[HASH_HEX_SIZE + 1];
+        hash_to_hex(&sorted[i].hash, hex);
+        if (fprintf(f, "%o %s %" PRIu64 " %u %s\n",
+                    sorted[i].mode,
+                    hex,
+                    sorted[i].mtime_sec,
+                    sorted[i].size,
+                    sorted[i].path) < 0) {
+            free(sorted);
+            fclose(f);
+            unlink(tmp_path);
+            return -1;
+        }
+    }
+
+    if (fflush(f) != 0 || fsync(fileno(f)) != 0 || fclose(f) != 0) {
+        free(sorted);
+        unlink(tmp_path);
+        return -1;
+    }
+    free(sorted);
+
+    if (rename(tmp_path, INDEX_FILE) != 0) {
+        unlink(tmp_path);
+        return -1;
+    }
+
+    int dirfd = open(PES_DIR, O_RDONLY);
+    if (dirfd >= 0) {
+        fsync(dirfd);
+        close(dirfd);
+    }
+
+    return 0;
 }
 
 // Stage a file for the next commit.
