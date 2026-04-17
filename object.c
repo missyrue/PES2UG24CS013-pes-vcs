@@ -108,8 +108,19 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     if (header_len < 0 || (size_t)header_len + 1 > sizeof(header)) return -1;
     header_len++; // include NUL separator
 
-    (void)data;
-    (void)id_out;
+    size_t total_len = (size_t)header_len + len;
+    uint8_t *object = malloc(total_len);
+    if (!object) return -1;
+    memcpy(object, header, (size_t)header_len);
+    if (len > 0) memcpy(object + header_len, data, len);
+
+    compute_hash(object, total_len, id_out);
+    if (object_exists(id_out)) {
+        free(object);
+        return 0;
+    }
+
+    free(object);
     return -1;
 }
 
