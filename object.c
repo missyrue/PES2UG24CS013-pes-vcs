@@ -240,9 +240,49 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
         return -1;
     }
 
-    (void)type_out;
-    (void)data_out;
-    (void)len_out;
+    size_t header_len = (uint8_t *)nul - buffer;
+    char header[64];
+    if (header_len >= sizeof(header)) {
+        free(buffer);
+        return -1;
+    }
+    memcpy(header, buffer, header_len);
+    header[header_len] = '\0';
+
+    char type_str[16];
+    size_t data_len;
+    if (sscanf(header, "%15s %zu", type_str, &data_len) != 2) {
+        free(buffer);
+        return -1;
+    }
+
+    size_t payload_offset = header_len + 1;
+    if (payload_offset > (size_t)file_size || data_len != (size_t)file_size - payload_offset) {
+        free(buffer);
+        return -1;
+    }
+
+    if (strcmp(type_str, "blob") == 0) {
+        *type_out = OBJ_BLOB;
+    } else if (strcmp(type_str, "tree") == 0) {
+        *type_out = OBJ_TREE;
+    } else if (strcmp(type_str, "commit") == 0) {
+        *type_out = OBJ_COMMIT;
+    } else {
+        free(buffer);
+        return -1;
+    }
+
+    uint8_t *data = malloc(data_len + 1);
+    if (!data) {
+        free(buffer);
+        return -1;
+    }
+    if (data_len > 0) memcpy(data, buffer + payload_offset, data_len);
+    data[data_len] = '\0';
+
+    *data_out = data;
+    *len_out = data_len;
     free(buffer);
-    return -1;
+    return 0;
 }
